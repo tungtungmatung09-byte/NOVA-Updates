@@ -1,0 +1,41 @@
+appId: private.nova.desktop
+productName: NOVA
+executableName: NOVA
+electronVersion: 45.2.1
+directories:
+  app: .
+  output: ../../release-output
+asar: true
+npmRebuild: false
+files:
+  - package.json
+  - desktop/*.cjs
+  - desktop/public-config.json
+  - dist/**
+  - '!**/*.map'
+  - '!**/.env*'
+win:
+  icon: ../../release/nova.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  signAndEditExecutable: false
+  signtoolOptions:
+    publisherName: NOVA Developer
+nsis:
+  artifactName: NOVA-Setup.exe
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: NOVA
+  uninstallDisplayName: NOVA
+  runAfterFinish: false
+publish:
+  provider: github
+  owner: tungtungmatung09-byte
+  repo: NOVA-Updates
+  private: false
+  releaseType: release

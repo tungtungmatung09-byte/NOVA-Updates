@@ -1,0 +1,46 @@
+name: Build and publish NOVA update
+on:
+  push:
+    branches: [main]
+    paths: ['app/app.asar.gz', '.github/workflows/release.yml', 'release/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: nova-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - name: Install packaging tools
+        run: npm install --ignore-scripts --no-save --package-lock=false electron-builder@26.18.0 @electron/asar@4.3.1
+      - name: Extract reviewed client package
+        run: |
+          node -e "require('fs').writeFileSync('app/app.asar',require('zlib').gunzipSync(require('fs').readFileSync('app/app.asar.gz')))"
+          node node_modules/@electron/asar/bin/asar.mjs extract app/app.asar .stage/app
+      - name: Build Windows installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          $buildConfig = (Resolve-Path release/electron-builder.yml).Path
+          node node_modules/electron-builder/cli.js --projectDir .stage/app --config $buildConfig --win nsis --x64 --publish never
+      - name: Sign release policy
+        env:
+          NOVA_UPDATE_SIGNING_KEY: ${{ secrets.NOVA_UPDATE_SIGNING_KEY }}
+        run: |
+          $releaseVersion = (Get-Content .stage/app/package.json -Raw | ConvertFrom-Json).version
+          node release/sign-update.mjs release-output/NOVA-Setup.exe $releaseVersion env:NOVA_UPDATE_SIGNING_KEY
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $releaseVersion = (Get-Content .stage/app/package.json -Raw | ConvertFrom-Json).version
+          gh release create "v$releaseVersion" release-output/NOVA-Setup.exe release-output/NOVA-Setup.exe.blockmap release-output/latest.yml release-output/NOVA-Setup.exe.sig --title "NOVA $releaseVersion" --notes "Required NOVA update. Install this version once to enable in-app updates. Account settings are preserved." --draft
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit "v$releaseVersion" --draft=false --latest
